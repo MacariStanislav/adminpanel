@@ -24,12 +24,20 @@ export default function AdminPage() {
 
   const [allCars, setAllCars] = useState([]);
   const [message, setMessage] = useState('');
+  
+  // Фильтры
+  const [searchTerm, setSearchTerm] = useState('');
+  const [maxPrice, setMaxPrice] = useState('');
+  const [selectedBrand, setSelectedBrand] = useState('');
 
-  const ADMIN_KEY = '1234'; 
-
+  // Простой пароль (замени на свой)
+  const ADMIN_KEY =2072264;
   const brands = ['BMW', 'Mercedes', 'Toyota', 'Volkswagen', 'Dacia', 'Opel', 'Volvo', 'Audi', 'Skoda', 'Peugeot', 'Renault', 'Citroen'];
   const fuelTypes = ['Бензин', 'Дизель', 'Электричество', 'Гибрид'];
   const gearboxes = ['Механика', 'Автомат'];
+
+  // Проверка правильности пароля
+  const isAuthenticated = adminPassword == ADMIN_KEY;
 
   const fetchAllCars = async () => {
     try {
@@ -46,6 +54,18 @@ export default function AdminPage() {
     fetchAllCars(); 
   }, []);
 
+  // Фильтрация машин
+  const filteredCars = allCars.filter(car => {
+    const matchesSearch = searchTerm === '' || 
+      car.brand?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      car.model?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesPrice = maxPrice === '' || car.price <= Number(maxPrice);
+    const matchesBrand = selectedBrand === '' || car.brand === selectedBrand;
+    
+    return matchesSearch && matchesPrice && matchesBrand;
+  });
+
   const handleSingleChange = (e) => {
     const { name, value } = e.target;
     setSingleCar(prev => ({
@@ -56,7 +76,7 @@ export default function AdminPage() {
   };
 
   const handleSingleSubmit = async () => {
-    if (adminPassword !== ADMIN_KEY) { 
+    if (!isAuthenticated) { 
       setMessage('Неверный пароль'); 
       return; 
     }
@@ -128,7 +148,7 @@ export default function AdminPage() {
   };
 
   const handleBulkUploadMedia = async () => {
-    if (adminPassword !== ADMIN_KEY) { 
+    if (!isAuthenticated) { 
       setMessage('Неверный пароль'); 
       return; 
     }
@@ -170,7 +190,13 @@ export default function AdminPage() {
   };
 
   const handleDelete = async (id) => {
+    if (!isAuthenticated) { 
+      setMessage('Неверный пароль для удаления'); 
+      return; 
+    }
+    
     if (!confirm('Удалить эту машину?')) return;
+    
     try {
       await api.delete('/cars', { data: { id } });
       fetchAllCars();
@@ -194,6 +220,9 @@ export default function AdminPage() {
           onChange={e => setAdminPassword(e.target.value)}
           style={{ padding: '8px', width: '300px', borderRadius: '6px', border: '1px solid #ccc' }}
         />
+        <div style={{ marginTop: '5px', fontSize: '12px', color: '#666' }}>
+          {isAuthenticated ? '✅ Пароль верный' : 'Введите пароль для добавления и удаления машин'}
+        </div>
       </div>
 
       {/* Добавить одну машину */}
@@ -330,14 +359,15 @@ export default function AdminPage() {
           style={{ 
             marginTop: '10px', 
             padding: '8px 12px', 
-            backgroundColor: '#007bff', 
+            backgroundColor: isAuthenticated ? '#007bff' : '#6c757d',
             color: '#fff', 
             border: 'none', 
             borderRadius: '5px', 
-            cursor: 'pointer' 
+            cursor: isAuthenticated ? 'pointer' : 'not-allowed'
           }}
+          disabled={!isAuthenticated}
         >
-          Добавить машину
+          {isAuthenticated ? 'Добавить машину' : 'Введите пароль'}
         </button>
       </div>
 
@@ -375,63 +405,178 @@ export default function AdminPage() {
               style={{ 
                 marginTop: '10px', 
                 padding: '8px 12px', 
-                backgroundColor: '#28a745', 
+                backgroundColor: isAuthenticated ? '#28a745' : '#6c757d',
                 color: '#fff', 
                 border: 'none', 
                 borderRadius: '5px', 
-                cursor: 'pointer' 
+                cursor: isAuthenticated ? 'pointer' : 'not-allowed'
               }}
+              disabled={!isAuthenticated}
             >
-              {currentIndex + 1 === carsArray.length ? 'Загрузить и закончить' : 'Загрузить и следующая'}
+              {isAuthenticated 
+                ? (currentIndex + 1 === carsArray.length ? 'Загрузить и закончить' : 'Загрузить и следующая')
+                : 'Введите пароль'
+              }
             </button>
           </>
         )}
       </div>
 
-      {/* Список всех машин */}
+      {/* Улучшенный список всех машин с фильтрами */}
       <div style={{ flexBasis: '100%', marginTop: '30px' }}>
-        <h2>Все машины на сервере ({allCars.length})</h2>
-        {allCars.length > 0 ? allCars.map((car, index) => (
-          <div 
-            key={car._id || car.id || index} 
-            style={{ 
-              border: '1px solid #ccc', 
-              padding: '10px', 
-              marginBottom: '5px', 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center', 
-              borderRadius: '5px' 
-            }}
-          >
-            <div>
-              <strong>{car.brand} {car.model}</strong> - {car.yearOfManufacture}г. - {car.price}€ - {car.mileage}км
-              {car.mediaUrlVideo && (
-                <a 
-                  href={car.mediaUrlVideo} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  style={{ marginLeft: '10px', color: '#E1306C', textDecoration: 'none' }}
-                >
-                  📹 Instagram
-                </a>
-              )}
-            </div>
-            <button 
-              onClick={() => handleDelete(car._id || car.id)} 
-              style={{ 
-                backgroundColor: 'red', 
-                color: '#fff', 
-                border: 'none', 
-                borderRadius: '4px', 
-                padding: '4px 8px', 
-                cursor: 'pointer' 
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
+          <h2>Все машины на сервере ({filteredCars.length})</h2>
+          
+          {/* Фильтры */}
+          <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
+            {/* Поиск по названию */}
+            <input
+              type="text"
+              placeholder="Поиск по марке или модели..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{ padding: '8px', borderRadius: '6px', border: '1px solid #ccc', minWidth: '200px' }}
+            />
+            
+            {/* Фильтр по цене */}
+            <input
+              type="number"
+              placeholder="Макс. цена (€)"
+              value={maxPrice}
+              onChange={(e) => setMaxPrice(e.target.value)}
+              style={{ padding: '8px', borderRadius: '6px', border: '1px solid #ccc', width: '150px' }}
+            />
+            
+            {/* Фильтр по бренду */}
+            <select
+              value={selectedBrand}
+              onChange={(e) => setSelectedBrand(e.target.value)}
+              style={{ padding: '8px', borderRadius: '6px', border: '1px solid #ccc', minWidth: '150px' }}
+            >
+              <option value="">Все марки</option>
+              {brands.map(brand => (
+                <option key={brand} value={brand}>{brand}</option>
+              ))}
+            </select>
+            
+            {/* Кнопка сброса фильтров */}
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                setMaxPrice('');
+                setSelectedBrand('');
+              }}
+              style={{
+                padding: '8px 12px',
+                backgroundColor: '#6c757d',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer'
               }}
             >
-              Delete
+              Сбросить
             </button>
           </div>
-        )) : <p>Нет машин на сервере</p>}
+        </div>
+
+        {filteredCars.length > 0 ? (
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', 
+            gap: '20px' 
+          }}>
+            {filteredCars.map((car, index) => (
+              <div 
+                key={car._id || car.id || index} 
+                style={{ 
+                  border: '1px solid #ddd',
+                  borderRadius: '10px',
+                  padding: '15px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                  backgroundColor: '#fff'
+                }}
+              >
+                {/* Первое фото */}
+                {car.mediaUrlPhoto && car.mediaUrlPhoto.length > 0 && (
+                  <div style={{ marginBottom: '15px', textAlign: 'center' }}>
+                    <img 
+                      src={car.mediaUrlPhoto[0]} 
+                      alt={`${car.brand} ${car.model}`}
+                      style={{ 
+                        width: '100%', 
+                        height: '200px', 
+                        objectFit: 'cover',
+                        borderRadius: '8px'
+                      }}
+                    />
+                  </div>
+                )}
+                
+                {/* Основная информация */}
+                <div style={{ marginBottom: '10px' }}>
+                  <h3 style={{ margin: '0 0 5px 0', color: '#333' }}>
+                    {car.brand} {car.model}
+                  </h3>
+                  <div style={{ color: '#666', fontSize: '14px' }}>
+                    <div>📅 {car.yearOfManufacture} год</div>
+                    <div>💰 {car.price?.toLocaleString()} €</div>
+                    <div>🛣️ {car.mileage?.toLocaleString()} км</div>
+                    <div>⚙️ {car.engineDisplacement} л • {car.fuelType} • {car.gearbox}</div>
+                  </div>
+                </div>
+
+                {/* Instagram ссылка */}
+                {car.mediaUrlVideo && (
+                  <div style={{ marginBottom: '15px' }}>
+                    <a 
+                      href={car.mediaUrlVideo} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      style={{ 
+                        display: 'inline-flex', 
+                        alignItems: 'center',
+                        color: '#E1306C', 
+                        textDecoration: 'none',
+                        fontWeight: '500'
+                      }}
+                    >
+                      📹 Instagram видео
+                    </a>
+                  </div>
+                )}
+
+                {/* Кнопка удаления */}
+                <button 
+                  onClick={() => handleDelete(car._id || car.id)} 
+                  style={{ 
+                    width: '100%',
+                    backgroundColor: isAuthenticated ? '#dc3545' : '#6c757d',
+                    color: '#fff', 
+                    border: 'none', 
+                    borderRadius: '6px', 
+                    padding: '8px', 
+                    cursor: isAuthenticated ? 'pointer' : 'not-allowed',
+                    fontSize: '14px'
+                  }}
+                  disabled={!isAuthenticated}
+                >
+                  {isAuthenticated ? 'Удалить машину' : 'Введите пароль для удаления'}
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ 
+            textAlign: 'center', 
+            padding: '40px', 
+            color: '#666',
+            border: '2px dashed #ddd',
+            borderRadius: '10px'
+          }}>
+            {allCars.length === 0 ? 'Нет машин на сервере' : 'Машины по вашему запросу не найдены'}
+          </div>
+        )}
       </div>
 
       {message && (
