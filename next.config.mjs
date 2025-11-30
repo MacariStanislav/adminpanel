@@ -4,10 +4,7 @@ const nextConfig = {
   trailingSlash: true,
   images: {
     unoptimized: true
-  },
-  // УБРАТЬ basePath и assetPrefix для Render
-  // basePath: '/adminpanel',
-  // assetPrefix: '/adminpanel/',
+  }
 }
 
 module.exports = nextConfig
