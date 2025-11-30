@@ -1,10 +1,12 @@
 {
   "name": "adminpanel",
   "version": "0.1.0",
+  "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "lint": "eslint"
   },
   "dependencies": {
     "axios": "^1.13.2",
@@ -15,7 +17,6 @@
   "devDependencies": {
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
-    "eslint-config-next": "16.0.6",
-    "gh-pages": "^6.3.0"
+    "eslint-config-next": "16.0.6"
   }
 }
