@@ -1,14 +1,11 @@
 {
   "name": "adminpanel",
   "version": "0.1.0",
-  "private": true,
-   "scripts": {
+  "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "deploy": "npm run build && if not exist out\\.nojekyll (echo. > out\\.nojekyll) && gh-pages -d out -t true"
+    "start": "next start"
   },
-  "homepage": "https://macaristanislav.github.io/adminpanel",
   "dependencies": {
     "axios": "^1.13.2",
     "next": "16.0.6",
