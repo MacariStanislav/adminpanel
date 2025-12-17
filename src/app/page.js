@@ -28,7 +28,7 @@ export default function AdminPage() {
   const [allCars, setAllCars] = useState([]);
   const [message, setMessage] = useState({ text: '', type: '' });
   const [isLoading, setIsLoading] = useState(false);
-  
+  const [isUploading, setIsUploading] = useState(false);
   // Фильтры
   const [searchTerm, setSearchTerm] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
@@ -78,25 +78,21 @@ export default function AdminPage() {
   };
 
   const fetchAllCars = async () => {
-    try {
-      setIsLoading(true);
-      const res = await api.get('/cars');
-      const carsData = Array.isArray(res.data) ? res.data : res.data.cars || [];
-      const uniqueCars = carsData.filter((car, index, self) =>
-        index === self.findIndex((c) => (
-          c._id === car._id || 
-          (c.id && c.id === car.id) ||
-          (c.brand === car.brand && c.model === car.model && c.yearOfManufacture === car.yearOfManufacture)
-        ))
-      );
-      setAllCars(uniqueCars);
-    } catch (err) {
-      console.error(err);
-      showMessage('Ошибка при загрузке машин с сервера', 'error');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  try {
+    setIsLoading(true);
+    const res = await api.get('/cars');
+    const carsData = Array.isArray(res.data) ? res.data : res.data.cars || [];
+    
+    // ⭐ ПРОСТО ПОКАЗЫВАЕМ ВСЕ МАШИНЫ БЕЗ ФИЛЬТРАЦИИ
+    setAllCars(carsData);
+    console.log('Загружено машин:', carsData.length);
+  } catch (err) {
+    console.error(err);
+    showMessage('Ошибка при загрузке машин с сервера', 'error');
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const filteredCars = allCars.filter(car => {
     const matchesSearch = searchTerm === '' || 
@@ -234,54 +230,69 @@ export default function AdminPage() {
     
     reader.readAsText(file);
   };
+const handleBulkUploadMedia = async () => {
+  // Защита от повторного нажатия
+  if (isUploading) {
+    showMessage('Идет загрузка, пожалуйста подождите...', 'info');
+    return;
+  }
+  
+  const currentCar = carsArray[currentIndex];
+  if (!currentCar) {
+    showMessage('Нет данных о машине', 'error');
+    return;
+  }
+  
+  if (!bulkPhotos.length) { 
+    showMessage('Добавьте хотя бы одно фото для текущей машины', 'error'); 
+    return; 
+  }
 
-  const handleBulkUploadMedia = async () => {
-    const currentCar = carsArray[currentIndex];
-    if (!currentCar) return;
-    if (!bulkPhotos.length) { 
-      showMessage('Добавьте хотя бы одно фото для текущей машины', 'error'); 
-      return; 
-    }
-
-    try {
-      showMessage(`Загружаю машину ${currentIndex + 1}/${carsArray.length}...`, 'info');
-      
-      const formData = new FormData();
-      Object.entries(currentCar).forEach(([k, v]) => {
-        if (v !== '' && v !== null && v !== undefined) {
-          formData.append(k, v.toString());
-        }
-      });
-      bulkPhotos.forEach(p => formData.append('mediaUrlPhoto', p));
-
-      await api.post('/cars/bulk', formData, { 
-        headers: { 'Content-Type': 'multipart/form-data' } 
-      });
-      
-      const progress = Math.round(((currentIndex + 1) / carsArray.length) * 100);
-      setUploadProgress(progress);
-      showMessage(`Машина "${currentCar.brand} ${currentCar.model}" успешно загружена`, 'success');
-
-      setBulkPhotos([]);
-
-      if (currentIndex + 1 < carsArray.length) {
-        setCurrentIndex(currentIndex + 1);
-      } else {
-        await fetchAllCars();
-        setCarsArray([]);
-        setFileName('');
-        setUploadProgress(100);
-        showMessage('Все машины успешно загружены! Файл обработан.', 'success');
-        setTimeout(() => {
-          setUploadProgress(0);
-        }, 2000);
+  try {
+    setIsUploading(true);
+    showMessage(`Загружаю машину "${currentCar.brand} ${currentCar.model}" (${currentIndex + 1}/${carsArray.length})...`, 'info');
+    
+    const formData = new FormData();
+    Object.entries(currentCar).forEach(([k, v]) => {
+      if (v !== '' && v !== null && v !== undefined) {
+        formData.append(k, v.toString());
       }
-    } catch (err) {
-      console.error('Ошибка при bulk добавлении машины:', err);
-      showMessage(`Ошибка при загрузке машины: ${err.response?.data?.message || err.message}`, 'error');
-    }
-  };
+    });
+    bulkPhotos.forEach(p => formData.append('mediaUrlPhoto', p));
 
+    await api.post('/cars/bulk', formData, { 
+      headers: { 'Content-Type': 'multipart/form-data' } 
+    });
+    
+    const progress = Math.round(((currentIndex + 1) / carsArray.length) * 100);
+    setUploadProgress(progress);
+    showMessage(`✅ Машина "${currentCar.brand} ${currentCar.model}" успешно загружена (${currentIndex + 1}/${carsArray.length})`, 'success');
+
+    // Очищаем фото ТОЛЬКО ПОСЛЕ УСПЕШНОЙ ЗАГРУЗКИ
+    setBulkPhotos([]);
+
+    // Переходим к следующей машине
+    if (currentIndex + 1 < carsArray.length) {
+      setCurrentIndex(currentIndex + 1);
+      showMessage(`Готово! Теперь добавьте фото для следующей машины (${currentIndex + 2}/${carsArray.length})`, 'info');
+    } else {
+      // Все машины загружены
+      await fetchAllCars();
+      setCarsArray([]);
+      setFileName('');
+      setUploadProgress(100);
+      showMessage('🎉 Все машины успешно загружены! Файл обработан.', 'success');
+      setTimeout(() => {
+        setUploadProgress(0);
+      }, 2000);
+    }
+  } catch (err) {
+    console.error('Ошибка при bulk добавлении машины:', err);
+    showMessage(`❌ Ошибка при загрузке машины: ${err.response?.data?.message || err.message}`, 'error');
+  } finally {
+    setIsUploading(false);
+  }
+};
   const handleDelete = async (id) => {
     if (!confirm('Удалить эту машину?')) return;
     
@@ -1219,25 +1230,28 @@ export default function AdminPage() {
                     </div>
                   )}
 
-                  <button 
-                    onClick={handleBulkUploadMedia}
-                    disabled={!bulkPhotos.length || isLoading}
-                    style={{
-                      width: '100%',
-                      background: 'linear-gradient(135deg, #48bb78 0%, #38a169 100%)',
-                      color: 'white',
-                      fontWeight: '600',
-                      padding: '14px',
-                      borderRadius: '10px',
-                      border: 'none',
-                      fontSize: '16px',
-                      cursor: !bulkPhotos.length || isLoading ? 'not-allowed' : 'pointer',
-                      opacity: !bulkPhotos.length || isLoading ? 0.5 : 1,
-                      transition: 'all 0.3s'
-                    }}
-                  >
-                    {isLoading ? '⏳ Загрузка...' : '📤 Загрузить и продолжить'}
-                  </button>
+<button 
+  onClick={handleBulkUploadMedia}
+  disabled={!bulkPhotos.length || isLoading || isUploading}
+  style={{
+    width: '100%',
+    background: 'linear-gradient(135deg, #48bb78 0%, #38a169 100%)',
+    color: 'white',
+    fontWeight: '600',
+    padding: '14px',
+    borderRadius: '10px',
+    border: 'none',
+    fontSize: '16px',
+    cursor: !bulkPhotos.length || isLoading || isUploading ? 'not-allowed' : 'pointer',
+    opacity: !bulkPhotos.length || isLoading || isUploading ? 0.5 : 1,
+    transition: 'all 0.3s'
+  }}
+>
+  {isUploading ? '⏳ Загрузка...' : 
+   isLoading ? '⏳ Обработка...' : 
+   currentIndex + 1 === carsArray.length ? '✅ Завершить загрузку' : 
+   '📤 Загрузить и перейти к следующей'}
+</button>
                 </div>
               </>
             )}
