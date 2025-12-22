@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import api from '@/utils/api';
 
 export default function AdminPage() {
@@ -33,9 +33,19 @@ export default function AdminPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
   const [selectedBrand, setSelectedBrand] = useState('');
+  
+  // Блокировка повторной отправки
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitTimerRef = useRef(null);
+  
+  // Для отображения фото в списке машин
+  const [carPhotoIndexes, setCarPhotoIndexes] = useState({});
 
   // Простой пароль
   const ADMIN_PASSWORD = '2072264';
+  
+  // Ограничение на количество фото
+  const MAX_PHOTOS = 10;
   
   // ОБНОВЛЕННЫЙ СПИСОК ВСЕХ МАРОК из CarFilter
   const brands = [
@@ -56,6 +66,13 @@ export default function AdminPage() {
     if (isAuthenticated) {
       fetchAllCars();
     }
+    
+    // Очистка таймера при размонтировании
+    return () => {
+      if (submitTimerRef.current) {
+        clearTimeout(submitTimerRef.current);
+      }
+    };
   }, [isAuthenticated]);
 
   // Вход в систему
@@ -92,6 +109,14 @@ export default function AdminPage() {
       
       // Показываем все машины без фильтрации
       setAllCars(carsData);
+      
+      // Инициализируем индексы фото для всех машин
+      const initialIndexes = {};
+      carsData.forEach((car, index) => {
+        initialIndexes[car._id || car.id || index] = 0;
+      });
+      setCarPhotoIndexes(initialIndexes);
+      
       console.log('Загружено машин:', carsData.length);
     } catch (err) {
       console.error(err);
@@ -99,6 +124,29 @@ export default function AdminPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Функции для управления фото в списке машин
+  const nextPhoto = (carId) => {
+    setCarPhotoIndexes(prev => {
+      const car = allCars.find(c => c._id === carId || c.id === carId);
+      if (!car || !car.mediaUrlPhoto) return prev;
+      
+      const currentIndex = prev[carId] || 0;
+      const nextIndex = (currentIndex + 1) % car.mediaUrlPhoto.length;
+      return { ...prev, [carId]: nextIndex };
+    });
+  };
+
+  const prevPhoto = (carId) => {
+    setCarPhotoIndexes(prev => {
+      const car = allCars.find(c => c._id === carId || c.id === carId);
+      if (!car || !car.mediaUrlPhoto) return prev;
+      
+      const currentIndex = prev[carId] || 0;
+      const prevIndex = currentIndex === 0 ? car.mediaUrlPhoto.length - 1 : currentIndex - 1;
+      return { ...prev, [carId]: prevIndex };
+    });
   };
 
   const filteredCars = allCars.filter(car => {
@@ -121,13 +169,29 @@ export default function AdminPage() {
     }));
   };
 
+  // Функция для удаления фото перед загрузкой
+  const removeSinglePhoto = (index) => {
+    setSinglePhotos(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeBulkPhoto = (index) => {
+    setBulkPhotos(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSingleSubmit = async () => {
+    // Защита от спама и повторной отправки
+    if (isSubmitting) {
+      showMessage('Пожалуйста, подождите. Идет загрузка...', 'info');
+      return;
+    }
+    
     if (!singlePhotos.length) { 
       showMessage('Добавьте хотя бы одно фото', 'error'); 
       return; 
     }
 
     try {
+      setIsSubmitting(true);
       const formData = new FormData();
       
       Object.entries(singleCar).forEach(([k, v]) => {
@@ -144,7 +208,7 @@ export default function AdminPage() {
       
       await fetchAllCars();
       
-      showMessage(`Машина "${singleCar.brand} ${singleCar.model}" добавлена`, 'success');
+      showMessage(`✅ Машина "${singleCar.brand} ${singleCar.model}" успешно добавлена`, 'success');
 
       // Сброс формы
       setSingleCar({
@@ -159,9 +223,16 @@ export default function AdminPage() {
         mediaUrlVideo: ''
       });
       setSinglePhotos([]);
+      
+      // Блокировка повторной отправки на 3 секунды
+      submitTimerRef.current = setTimeout(() => {
+        setIsSubmitting(false);
+      }, 3000);
+      
     } catch (err) {
       console.error('Ошибка при добавлении машины:', err);
-      showMessage(`Ошибка: ${err.response?.data?.message || err.message}`, 'error');
+      showMessage(`❌ Ошибка: ${err.response?.data?.message || err.message}`, 'error');
+      setIsSubmitting(false);
     }
   };
 
@@ -939,82 +1010,193 @@ export default function AdminPage() {
               </div>
 
               <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <label style={{
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    color: '#4a5568'
+                  }}>
+                    📸 Фотографии (обязательно хотя бы 1)
+                  </label>
+                  <span style={{
+                    fontSize: '12px',
+                    color: singlePhotos.length >= MAX_PHOTOS ? '#f56565' : '#718096',
+                    fontWeight: singlePhotos.length >= MAX_PHOTOS ? '600' : '400'
+                  }}>
+                    {singlePhotos.length}/{MAX_PHOTOS} фото
+                  </span>
+                </div>
+                
                 <label style={{
                   display: 'block',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  color: '#4a5568',
-                  marginBottom: '8px'
+                  cursor: singlePhotos.length >= MAX_PHOTOS ? 'not-allowed' : 'pointer'
                 }}>
-                  📸 Фотографии (обязательно хотя бы 1)
-                </label>
-                <input 
-                  type="file" 
-                  accept="image/*" 
-                  multiple 
-                  onChange={e => setSinglePhotos([...singlePhotos, ...Array.from(e.target.files)])}
-                  style={{
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    multiple 
+                    onChange={(e) => {
+                      if (singlePhotos.length >= MAX_PHOTOS) {
+                        showMessage(`Максимальное количество фото: ${MAX_PHOTOS}`, 'error');
+                        return;
+                      }
+                      
+                      const files = Array.from(e.target.files);
+                      const remainingSlots = MAX_PHOTOS - singlePhotos.length;
+                      
+                      if (files.length > remainingSlots) {
+                        showMessage(`Вы пытаетесь добавить ${files.length} фото, но осталось только ${remainingSlots} слотов`, 'error');
+                        const limitedFiles = files.slice(0, remainingSlots);
+                        setSinglePhotos([...singlePhotos, ...limitedFiles]);
+                      } else {
+                        setSinglePhotos([...singlePhotos, ...files]);
+                      }
+                      
+                      e.target.value = ''; // Сброс input
+                    }}
+                    disabled={singlePhotos.length >= MAX_PHOTOS}
+                    style={{ display: 'none' }}
+                  />
+                  <div style={{
                     width: '90%',
-                    border: '2px dashed #cbd5e0',
+                    border: singlePhotos.length >= MAX_PHOTOS ? '2px dashed #fed7d7' : '2px dashed #cbd5e0',
                     borderRadius: '10px',
                     padding: '20px',
                     marginBottom: '10px',
-                    cursor: 'pointer'
-                  }}
-                />
+                    backgroundColor: singlePhotos.length >= MAX_PHOTOS ? '#fff5f5' : 'white',
+                    textAlign: 'center',
+                    color: singlePhotos.length >= MAX_PHOTOS ? '#f56565' : '#718096'
+                  }}>
+                    {singlePhotos.length >= MAX_PHOTOS 
+                      ? '❌ Достигнут лимит фото' 
+                      : `📁 Нажмите, чтобы добавить фото (осталось ${MAX_PHOTOS - singlePhotos.length})`}
+                  </div>
+                </label>
+                
                 {singlePhotos.length > 0 && (
                   <div style={{
                     backgroundColor: '#f0fff4',
                     border: '1px solid #c6f6d5',
                     borderRadius: '8px',
-                    padding: '12px'
+                    padding: '12px',
+                    marginBottom: '15px'
                   }}>
-                    <p style={{
-                      fontSize: '13px',
-                      fontWeight: '600',
-                      color: '#276749',
-                      margin: '0 0 5px 0'
-                    }}>
-                      Выбрано {singlePhotos.length} фото
-                    </p>
-                    <ul style={{
-                      margin: 0,
-                      paddingLeft: '20px',
-                      fontSize: '12px',
-                      color: '#276749'
-                    }}>
-                      {singlePhotos.slice(0, 3).map((p, i) => (
-                        <li key={i} style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {i + 1}. {p.name} ({(p.size / 1024).toFixed(1)} KB)
-                        </li>
-                      ))}
-                      {singlePhotos.length > 3 && (
-                        <li>... и ещё {singlePhotos.length - 3} фото</li>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                      <p style={{
+                        fontSize: '13px',
+                        fontWeight: '600',
+                        color: '#276749',
+                        margin: 0
+                      }}>
+                        Выбрано {singlePhotos.length} фото
+                      </p>
+                      {singlePhotos.length >= MAX_PHOTOS && (
+                        <span style={{
+                          fontSize: '11px',
+                          color: '#f56565',
+                          fontWeight: '600',
+                          backgroundColor: '#fed7d7',
+                          padding: '2px 8px',
+                          borderRadius: '10px'
+                        }}>
+                          Лимит
+                        </span>
                       )}
-                    </ul>
+                    </div>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+                      gap: '10px'
+                    }}>
+                      {singlePhotos.map((photo, index) => (
+                        <div key={index} style={{
+                          position: 'relative',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '6px',
+                          overflow: 'hidden'
+                        }}>
+                          <div style={{
+                            position: 'absolute',
+                            top: '4px',
+                            right: '4px',
+                            backgroundColor: 'rgba(245, 101, 101, 0.9)',
+                            color: 'white',
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            fontWeight: 'bold',
+                            zIndex: 2
+                          }}
+                          onClick={() => removeSinglePhoto(index)}>
+                            ✕
+                          </div>
+                          <img 
+                            src={URL.createObjectURL(photo)} 
+                            alt={`Фото ${index + 1}`}
+                            style={{ 
+                              width: '100%', 
+                              height: '80px', 
+                              objectFit: 'cover',
+                              display: 'block'
+                            }}
+                          />
+                          <div style={{
+                            padding: '4px',
+                            fontSize: '10px',
+                            color: '#718096',
+                            textAlign: 'center',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {photo.name.length > 15 ? photo.name.substring(0, 12) + '...' : photo.name}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
 
               <button 
                 onClick={handleSingleSubmit}
-                disabled={!singleCar.brand || !singleCar.model || !singlePhotos.length || isLoading}
+                disabled={!singleCar.brand || !singleCar.model || !singlePhotos.length || isLoading || isSubmitting}
                 style={{
                   width: '100%',
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  background: isSubmitting ? 
+                    'linear-gradient(135deg, #718096 0%, #4a5568 100%)' : 
+                    'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                   color: 'white',
                   fontWeight: '600',
                   padding: '15px',
                   borderRadius: '12px',
                   border: 'none',
                   fontSize: '16px',
-                  cursor: !singleCar.brand || !singleCar.model || !singlePhotos.length || isLoading ? 'not-allowed' : 'pointer',
-                  opacity: !singleCar.brand || !singleCar.model || !singlePhotos.length || isLoading ? 0.5 : 1,
+                  cursor: !singleCar.brand || !singleCar.model || !singlePhotos.length || isLoading || isSubmitting ? 'not-allowed' : 'pointer',
+                  opacity: !singleCar.brand || !singleCar.model || !singlePhotos.length || isLoading || isSubmitting ? 0.5 : 1,
                   transition: 'all 0.3s'
                 }}
               >
-                {isLoading ? '⏳ Загрузка...' : '✅ Добавить машину'}
+                {isSubmitting ? '⏳ Загружаем...' : 
+                 isLoading ? '⏳ Обработка...' : 
+                 '✅ Добавить машину'}
               </button>
+              
+              {isSubmitting && (
+                <div style={{
+                  fontSize: '12px',
+                  color: '#718096',
+                  textAlign: 'center',
+                  padding: '5px'
+                }}>
+                  Пожалуйста, подождите 3 секунды перед следующей загрузкой
+                </div>
+              )}
             </div>
           </div>
 
@@ -1209,30 +1391,68 @@ export default function AdminPage() {
 
                 {/* Загрузка фото */}
                 <div style={{ marginBottom: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <label style={{
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      color: '#4a5568'
+                    }}>
+                      📸 Добавьте фото для этой машины
+                    </label>
+                    <span style={{
+                      fontSize: '12px',
+                      color: bulkPhotos.length >= MAX_PHOTOS ? '#f56565' : '#718096',
+                      fontWeight: bulkPhotos.length >= MAX_PHOTOS ? '600' : '400'
+                    }}>
+                      {bulkPhotos.length}/{MAX_PHOTOS} фото
+                    </span>
+                  </div>
+                  
                   <label style={{
                     display: 'block',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    color: '#4a5568',
-                    marginBottom: '12px'
+                    cursor: bulkPhotos.length >= MAX_PHOTOS ? 'not-allowed' : 'pointer'
                   }}>
-                    📸 Добавьте фото для этой машины
-                  </label>
-                  
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    multiple 
-                    onChange={e => setBulkPhotos([...bulkPhotos, ...Array.from(e.target.files)])}
-                    style={{
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      multiple 
+                      onChange={(e) => {
+                        if (bulkPhotos.length >= MAX_PHOTOS) {
+                          showMessage(`Максимальное количество фото: ${MAX_PHOTOS}`, 'error');
+                          return;
+                        }
+                        
+                        const files = Array.from(e.target.files);
+                        const remainingSlots = MAX_PHOTOS - bulkPhotos.length;
+                        
+                        if (files.length > remainingSlots) {
+                          showMessage(`Вы пытаетесь добавить ${files.length} фото, но осталось только ${remainingSlots} слотов`, 'error');
+                          const limitedFiles = files.slice(0, remainingSlots);
+                          setBulkPhotos([...bulkPhotos, ...limitedFiles]);
+                        } else {
+                          setBulkPhotos([...bulkPhotos, ...files]);
+                        }
+                        
+                        e.target.value = ''; // Сброс input
+                      }}
+                      disabled={bulkPhotos.length >= MAX_PHOTOS}
+                      style={{ display: 'none' }}
+                    />
+                    <div style={{
                       width: '100%',
-                      border: '2px dashed #cbd5e0',
+                      border: bulkPhotos.length >= MAX_PHOTOS ? '2px dashed #fed7d7' : '2px dashed #cbd5e0',
                       borderRadius: '10px',
                       padding: '20px',
                       marginBottom: '15px',
-                      cursor: 'pointer'
-                    }}
-                  />
+                      backgroundColor: bulkPhotos.length >= MAX_PHOTOS ? '#fff5f5' : 'white',
+                      textAlign: 'center',
+                      color: bulkPhotos.length >= MAX_PHOTOS ? '#f56565' : '#718096'
+                    }}>
+                      {bulkPhotos.length >= MAX_PHOTOS 
+                        ? '❌ Достигнут лимит фото' 
+                        : `📁 Нажмите, чтобы добавить фото (осталось ${MAX_PHOTOS - bulkPhotos.length})`}
+                    </div>
+                  </label>
                   
                   {bulkPhotos.length > 0 && (
                     <div style={{
@@ -1242,39 +1462,109 @@ export default function AdminPage() {
                       padding: '12px',
                       marginBottom: '15px'
                     }}>
-                      <p style={{
-                        fontSize: '13px',
-                        fontWeight: '600',
-                        color: '#276749',
-                        margin: 0
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                        <p style={{
+                          fontSize: '13px',
+                          fontWeight: '600',
+                          color: '#276749',
+                          margin: 0
+                        }}>
+                          Фото для загрузки: {bulkPhotos.length}
+                        </p>
+                        {bulkPhotos.length >= MAX_PHOTOS && (
+                          <span style={{
+                            fontSize: '11px',
+                            color: '#f56565',
+                            fontWeight: '600',
+                            backgroundColor: '#fed7d7',
+                            padding: '2px 8px',
+                            borderRadius: '10px'
+                          }}>
+                            Лимит
+                          </span>
+                        )}
+                      </div>
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+                        gap: '10px'
                       }}>
-                        Фото для загрузки: {bulkPhotos.length}
-                      </p>
+                        {bulkPhotos.map((photo, index) => (
+                          <div key={index} style={{
+                            position: 'relative',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '6px',
+                            overflow: 'hidden'
+                          }}>
+                            <div style={{
+                              position: 'absolute',
+                              top: '4px',
+                              right: '4px',
+                              backgroundColor: 'rgba(245, 101, 101, 0.9)',
+                              color: 'white',
+                              width: '20px',
+                              height: '20px',
+                              borderRadius: '50%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              fontWeight: 'bold',
+                              zIndex: 2
+                            }}
+                            onClick={() => removeBulkPhoto(index)}>
+                              ✕
+                            </div>
+                            <img 
+                              src={URL.createObjectURL(photo)} 
+                              alt={`Фото ${index + 1}`}
+                              style={{ 
+                                width: '100%', 
+                                height: '80px', 
+                                objectFit: 'cover',
+                                display: 'block'
+                              }}
+                            />
+                            <div style={{
+                              padding: '4px',
+                              fontSize: '10px',
+                              color: '#718096',
+                              textAlign: 'center',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {photo.name.length > 15 ? photo.name.substring(0, 12) + '...' : photo.name}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
 
-                  <button 
-                    onClick={handleBulkUploadMedia}
-                    disabled={!bulkPhotos.length || isLoading || isUploading}
-                    style={{
-                      width: '100%',
-                      background: 'linear-gradient(135deg, #48bb78 0%, #38a169 100%)',
-                      color: 'white',
-                      fontWeight: '600',
-                      padding: '14px',
-                      borderRadius: '10px',
-                      border: 'none',
-                      fontSize: '16px',
-                      cursor: !bulkPhotos.length || isLoading || isUploading ? 'not-allowed' : 'pointer',
-                      opacity: !bulkPhotos.length || isLoading || isUploading ? 0.5 : 1,
-                      transition: 'all 0.3s'
-                    }}
-                  >
-                    {isUploading ? '⏳ Загрузка...' : 
-                     isLoading ? '⏳ Обработка...' : 
-                     currentIndex + 1 === carsArray.length ? '✅ Завершить загрузку' : 
-                     '📤 Загрузить и перейти к следующей'}
-                  </button>
+<button 
+  onClick={handleBulkUploadMedia}
+  disabled={!bulkPhotos.length || isLoading || isUploading}
+  style={{
+    width: '100%',
+    background: 'linear-gradient(135deg, #48bb78 0%, #38a169 100%)',
+    color: 'white',
+    fontWeight: '600',
+    padding: '14px',
+    borderRadius: '10px',
+    border: 'none',
+    fontSize: '16px',
+    cursor: !bulkPhotos.length || isLoading || isUploading ? 'not-allowed' : 'pointer',
+    opacity: !bulkPhotos.length || isLoading || isUploading ? 0.5 : 1,
+    transition: 'all 0.3s'
+  }}
+>
+  {isUploading ? '⏳ Загрузка...' : 
+   isLoading ? '⏳ Обработка...' : 
+   currentIndex + 1 === carsArray.length ? '✅ Завершить загрузку' : 
+   '📤 Загрузить и перейти к следующей'}
+</button>
                 </div>
               </>
             )}
@@ -1414,125 +1704,254 @@ export default function AdminPage() {
               gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
               gap: '20px'
             }}>
-              {filteredCars.map((car, index) => (
-                <div key={car._id || index} style={{
-                  backgroundColor: '#f8f9fa',
-                  borderRadius: '12px',
-                  border: '1px solid #e2e8f0',
-                  overflow: 'hidden',
-                  transition: 'all 0.3s'
-                }}>
-                  {car.mediaUrlPhoto?.[0] && (
-                    <div style={{ position: 'relative', height: '180px' }}>
-                      <img 
-                        src={car.mediaUrlPhoto[0]} 
-                        alt={`${car.brand} ${car.model}`}
-                        style={{ 
-                          width: '100%', 
-                          height: '100%', 
-                          objectFit: 'cover'
+              {filteredCars.map((car, index) => {
+                const carId = car._id || car.id || index;
+                const currentPhotoIndex = carPhotoIndexes[carId] || 0;
+                const hasPhotos = car.mediaUrlPhoto && car.mediaUrlPhoto.length > 0;
+                const hasMultiplePhotos = hasPhotos && car.mediaUrlPhoto.length > 1;
+                
+                return (
+                  <div key={carId} style={{
+                    backgroundColor: '#f8f9fa',
+                    borderRadius: '12px',
+                    border: '1px solid #e2e8f0',
+                    overflow: 'hidden',
+                    transition: 'all 0.3s'
+                  }}>
+                    {/* Область с фото в Instagram стиле */}
+                    {hasPhotos ? (
+                      <div style={{ 
+                        position: 'relative', 
+                        height: '320px', // Instagram-like высота
+                        backgroundColor: '#000'
+                      }}>
+                        <img 
+                          src={car.mediaUrlPhoto[currentPhotoIndex]} 
+                          alt={`${car.brand} ${car.model}`}
+                          style={{ 
+                            width: '100%', 
+                            height: '100%', 
+                            objectFit: 'cover'
+                          }}
+                        />
+                        
+                        {/* Индикатор количества фото */}
+                        <div style={{
+                          position: 'absolute',
+                          top: '15px',
+                          right: '15px',
+                          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                          color: 'white',
+                          padding: '5px 10px',
+                          borderRadius: '15px',
+                          fontSize: '12px',
+                          fontWeight: '500'
+                        }}>
+                          {currentPhotoIndex + 1}/{car.mediaUrlPhoto.length}
+                        </div>
+                        
+                        {/* Стрелки для навигации по фото */}
+                        {hasMultiplePhotos && (
+                          <>
+                            {/* Левая стрелка */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                prevPhoto(carId);
+                              }}
+                              style={{
+                                position: 'absolute',
+                                left: '10px',
+                                top: '50%',
+                                transform: 'translateY(-50%)',
+                                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                                color: 'white',
+                                border: 'none',
+                                width: '36px',
+                                height: '36px',
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                fontSize: '18px',
+                                zIndex: 2,
+                                transition: 'background-color 0.3s'
+                              }}
+                              onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(0, 0, 0, 0.7)'}
+                              onMouseOut={(e) => e.target.style.backgroundColor = 'rgba(0, 0, 0, 0.5)'}
+                            >
+                              ←
+                            </button>
+                            
+                            {/* Правая стрелка */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                nextPhoto(carId);
+                              }}
+                              style={{
+                                position: 'absolute',
+                                right: '10px',
+                                top: '50%',
+                                transform: 'translateY(-50%)',
+                                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                                color: 'white',
+                                border: 'none',
+                                width: '36px',
+                                height: '36px',
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                fontSize: '18px',
+                                zIndex: 2,
+                                transition: 'background-color 0.3s'
+                              }}
+                              onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(0, 0, 0, 0.7)'}
+                              onMouseOut={(e) => e.target.style.backgroundColor = 'rgba(0, 0, 0, 0.5)'}
+                            >
+                              →
+                            </button>
+                          </>
+                        )}
+                        
+                        {/* Индикаторы внизу (точки) */}
+                        {hasMultiplePhotos && (
+                          <div style={{
+                            position: 'absolute',
+                            bottom: '15px',
+                            left: '0',
+                            right: '0',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            gap: '6px'
+                          }}>
+                            {car.mediaUrlPhoto.map((_, idx) => (
+                              <div 
+                                key={idx}
+                                style={{
+                                  width: '8px',
+                                  height: '8px',
+                                  borderRadius: '50%',
+                                  backgroundColor: idx === currentPhotoIndex ? '#fff' : 'rgba(255, 255, 255, 0.5)',
+                                  cursor: 'pointer',
+                                  transition: 'background-color 0.3s'
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCarPhotoIndexes(prev => ({ ...prev, [carId]: idx }));
+                                }}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ 
+                        position: 'relative', 
+                        height: '320px',
+                        backgroundColor: '#e2e8f0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        <span style={{ 
+                          fontSize: '48px', 
+                          color: '#a0aec0'
+                        }}>
+                          🚗
+                        </span>
+                      </div>
+                    )}
+                    
+                    <div style={{ padding: '20px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '15px' }}>
+                        <div>
+                          <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#2d3748', margin: '0 0 5px 0' }}>
+                            {car.brand} {car.model}
+                          </h3>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#38a169' }}>
+                              {car.price.toLocaleString()} €
+                            </span>
+                            <span style={{ color: '#718096' }}>•</span>
+                            <span style={{ color: '#718096' }}>{car.mileage.toLocaleString()} км</span>
+                          </div>
+                        </div>
+                        <span style={{
+                          backgroundColor: '#bee3f8',
+                          color: '#2c5282',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          padding: '3px 10px',
+                          borderRadius: '15px'
+                        }}>
+                          {car.yearOfManufacture}
+                        </span>
+                      </div>
+                      
+                      <div style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: 'repeat(2, 1fr)', 
+                        gap: '10px',
+                        marginBottom: '20px',
+                        fontSize: '14px',
+                        color: '#4a5568'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                          <span style={{ marginRight: '8px' }}>⚙️</span>
+                          <span>{car.engineDisplacement} л</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                          <span style={{ marginRight: '8px' }}>⛽</span>
+                          <span>{car.fuelType}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                          <span style={{ marginRight: '8px' }}>🔧</span>
+                          <span>{car.gearbox}</span>
+                        </div>
+                        {car.mediaUrlVideo && (
+                          <div style={{ gridColumn: 'span 2' }}>
+                            <a 
+                              href={car.mediaUrlVideo} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                color: '#e1306c',
+                                textDecoration: 'none'
+                              }}
+                            >
+                              <span style={{ marginRight: '8px' }}>📹</span>
+                              <span>Instagram видео</span>
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <button 
+                        onClick={() => handleDelete(car._id || car.id)}
+                        style={{
+                          width: '100%',
+                          background: 'linear-gradient(135deg, #f56565 0%, #ed64a6 100%)',
+                          color: 'white',
+                          fontWeight: '600',
+                          padding: '12px',
+                          borderRadius: '10px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          transition: 'all 0.3s'
                         }}
-                      />
-                      <div style={{
-                        position: 'absolute',
-                        top: '10px',
-                        right: '10px',
-                        backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                        color: 'white',
-                        padding: '3px 8px',
-                        borderRadius: '15px',
-                        fontSize: '11px'
-                      }}>
-                        {car.mediaUrlPhoto?.length || 0} фото
-                      </div>
+                      >
+                        Удалить машину
+                      </button>
                     </div>
-                  )}
-                  
-                  <div style={{ padding: '20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '15px' }}>
-                      <div>
-                        <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#2d3748', margin: '0 0 5px 0' }}>
-                          {car.brand} {car.model}
-                        </h3>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#38a169' }}>
-                            {car.price.toLocaleString()} €
-                          </span>
-                          <span style={{ color: '#718096' }}>•</span>
-                          <span style={{ color: '#718096' }}>{car.mileage.toLocaleString()} км</span>
-                        </div>
-                      </div>
-                      <span style={{
-                        backgroundColor: '#bee3f8',
-                        color: '#2c5282',
-                        fontSize: '12px',
-                        fontWeight: '600',
-                        padding: '3px 10px',
-                        borderRadius: '15px'
-                      }}>
-                        {car.yearOfManufacture}
-                      </span>
-                    </div>
-                    
-                    <div style={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: 'repeat(2, 1fr)', 
-                      gap: '10px',
-                      marginBottom: '20px',
-                      fontSize: '14px',
-                      color: '#4a5568'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center' }}>
-                        <span style={{ marginRight: '8px' }}>⚙️</span>
-                        <span>{car.engineDisplacement} л</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center' }}>
-                        <span style={{ marginRight: '8px' }}>⛽</span>
-                        <span>{car.fuelType}</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center' }}>
-                        <span style={{ marginRight: '8px' }}>🔧</span>
-                        <span>{car.gearbox}</span>
-                      </div>
-                      {car.mediaUrlVideo && (
-                        <div style={{ gridColumn: 'span 2' }}>
-                          <a 
-                            href={car.mediaUrlVideo} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              color: '#e1306c',
-                              textDecoration: 'none'
-                            }}
-                          >
-                            <span style={{ marginRight: '8px' }}>📹</span>
-                            <span>Instagram видео</span>
-                          </a>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <button 
-                      onClick={() => handleDelete(car._id || car.id)}
-                      style={{
-                        width: '100%',
-                        background: 'linear-gradient(135deg, #f56565 0%, #ed64a6 100%)',
-                        color: 'white',
-                        fontWeight: '600',
-                        padding: '12px',
-                        borderRadius: '10px',
-                        border: 'none',
-                        cursor: 'pointer',
-                        transition: 'all 0.3s'
-                      }}
-                    >
-                      Удалить машину
-                    </button>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div style={{ textAlign: 'center', padding: '50px 20px' }}>
