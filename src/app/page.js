@@ -29,25 +29,19 @@ export default function AdminPage() {
   const [message, setMessage] = useState({ text: '', type: '' });
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  // Фильтры
   const [searchTerm, setSearchTerm] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
   const [selectedBrand, setSelectedBrand] = useState('');
   
-  // Блокировка повторной отправки
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submitTimerRef = useRef(null);
   
-  // Для отображения фото в списке машин
   const [carPhotoIndexes, setCarPhotoIndexes] = useState({});
 
-  // Простой пароль
   const ADMIN_PASSWORD = '2072264';
   
-  // Ограничение на количество фото
   const MAX_PHOTOS = 10;
   
-  // ОБНОВЛЕННЫЙ СПИСОК ВСЕХ МАРОК из CarFilter
   const brands = [
     'BMW', 'Mercedes', 'Toyota', 'Volkswagen', 'Dacia', 'Opel', 'Volvo', 'Audi', 
     'Skoda', 'Peugeot', 'Renault', 'Citroen', 'Kia', 'Ford', 'Nissan', 'Land Rover',
@@ -67,7 +61,6 @@ export default function AdminPage() {
       fetchAllCars();
     }
     
-    // Очистка таймера при размонтировании
     return () => {
       if (submitTimerRef.current) {
         clearTimeout(submitTimerRef.current);
@@ -75,7 +68,6 @@ export default function AdminPage() {
     };
   }, [isAuthenticated]);
 
-  // Вход в систему
   const handleLogin = (e) => {
     e.preventDefault();
     if (adminPassword === ADMIN_PASSWORD) {
@@ -126,7 +118,6 @@ export default function AdminPage() {
     }
   };
 
-  // Функции для управления фото в списке машин
   const nextPhoto = (carId) => {
     setCarPhotoIndexes(prev => {
       const car = allCars.find(c => c._id === carId || c.id === carId);
@@ -169,7 +160,6 @@ export default function AdminPage() {
     }));
   };
 
-  // Функция для удаления фото перед загрузкой
   const removeSinglePhoto = (index) => {
     setSinglePhotos(prev => prev.filter((_, i) => i !== index));
   };
@@ -179,7 +169,6 @@ export default function AdminPage() {
   };
 
   const handleSingleSubmit = async () => {
-    // Защита от спама и повторной отправки
     if (isSubmitting) {
       showMessage('Пожалуйста, подождите. Идет загрузка...', 'info');
       return;
@@ -224,7 +213,6 @@ export default function AdminPage() {
       });
       setSinglePhotos([]);
       
-      // Блокировка повторной отправки на 3 секунды
       submitTimerRef.current = setTimeout(() => {
         setIsSubmitting(false);
       }, 3000);
@@ -268,7 +256,6 @@ export default function AdminPage() {
             return null;
           }
           
-          // Проверяем, есть ли марка в нашем списке
           const normalizedBrand = brands.find(b => 
             b.toLowerCase() === car.brand.toLowerCase().trim()
           );
@@ -279,7 +266,7 @@ export default function AdminPage() {
           }
           
           return {
-            brand: normalizedBrand, // Используем нормализованное название
+            brand: normalizedBrand, 
             model: String(car.model || ''),
             yearOfManufacture: Number(car.yearOfManufacture) || 2024,
             engineDisplacement: Number(car.engineDisplacement) || 0,
@@ -320,7 +307,6 @@ export default function AdminPage() {
   };
 
   const handleBulkUploadMedia = async () => {
-    // Защита от повторного нажатия
     if (isUploading) {
       showMessage('Идет загрузка, пожалуйста подождите...', 'info');
       return;
@@ -357,15 +343,12 @@ export default function AdminPage() {
       setUploadProgress(progress);
       showMessage(`✅ Машина "${currentCar.brand} ${currentCar.model}" успешно загружена (${currentIndex + 1}/${carsArray.length})`, 'success');
 
-      // Очищаем фото ТОЛЬКО ПОСЛЕ УСПЕШНОЙ ЗАГРУЗКИ
       setBulkPhotos([]);
 
-      // Переходим к следующей машине
       if (currentIndex + 1 < carsArray.length) {
         setCurrentIndex(currentIndex + 1);
         showMessage(`Готово! Теперь добавьте фото для следующей машины (${currentIndex + 2}/${carsArray.length})`, 'info');
       } else {
-        // Все машины загружены
         await fetchAllCars();
         setCarsArray([]);
         setFileName('');
@@ -599,14 +582,12 @@ export default function AdminPage() {
     );
   }
 
-  // Основной интерфейс администратора
   return (
     <div style={{
       minHeight: '100vh',
       backgroundColor: '#f7fafc',
       fontFamily: 'system-ui, -apple-system, sans-serif'
     }}>
-      {/* Header */}
       <header style={{
         backgroundColor: 'white',
         boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
@@ -718,14 +699,12 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Основные секции */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
           gap: '30px',
           marginBottom: '40px'
         }}>
-          {/* Добавить одну машину */}
           <div style={{
             backgroundColor: 'white',
             borderRadius: '16px',
@@ -1052,7 +1031,7 @@ export default function AdminPage() {
                         setSinglePhotos([...singlePhotos, ...files]);
                       }
                       
-                      e.target.value = ''; // Сброс input
+                      e.target.value = ''; 
                     }}
                     disabled={singlePhotos.length >= MAX_PHOTOS}
                     style={{ display: 'none' }}
@@ -1200,7 +1179,6 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {/* Пакетная загрузка */}
           <div style={{
             backgroundColor: 'white',
             borderRadius: '16px',
@@ -1283,7 +1261,6 @@ export default function AdminPage() {
               </div>
             ) : (
               <>
-                {/* Информация о файле */}
                 <div style={{
                   background: 'linear-gradient(135deg, #f0fff4 0%, #e6fffa 100%)',
                   border: '1px solid #c6f6d5',
@@ -1361,7 +1338,6 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {/* Текущая машина */}
                 <div style={{ marginBottom: '20px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
                     <div style={{
@@ -1389,7 +1365,6 @@ export default function AdminPage() {
                   {renderCarCard(currentBulkCar)}
                 </div>
 
-                {/* Загрузка фото */}
                 <div style={{ marginBottom: '20px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                     <label style={{
@@ -1433,7 +1408,7 @@ export default function AdminPage() {
                           setBulkPhotos([...bulkPhotos, ...files]);
                         }
                         
-                        e.target.value = ''; // Сброс input
+                        e.target.value = ''; 
                       }}
                       disabled={bulkPhotos.length >= MAX_PHOTOS}
                       style={{ display: 'none' }}
@@ -1571,7 +1546,6 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* Список всех машин */}
         <div style={{
           backgroundColor: 'white',
           borderRadius: '16px',
@@ -1718,11 +1692,10 @@ export default function AdminPage() {
                     overflow: 'hidden',
                     transition: 'all 0.3s'
                   }}>
-                    {/* Область с фото в Instagram стиле */}
                     {hasPhotos ? (
                       <div style={{ 
                         position: 'relative', 
-                        height: '320px', // Instagram-like высота
+                        height: '320px',
                         backgroundColor: '#000'
                       }}>
                         <img 
@@ -1735,7 +1708,6 @@ export default function AdminPage() {
                           }}
                         />
                         
-                        {/* Индикатор количества фото */}
                         <div style={{
                           position: 'absolute',
                           top: '15px',
@@ -1784,7 +1756,6 @@ export default function AdminPage() {
                               ←
                             </button>
                             
-                            {/* Правая стрелка */}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1817,7 +1788,6 @@ export default function AdminPage() {
                           </>
                         )}
                         
-                        {/* Индикаторы внизу (точки) */}
                         {hasMultiplePhotos && (
                           <div style={{
                             position: 'absolute',
@@ -1972,7 +1942,6 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* Footer */}
       <footer style={{
         marginTop: '50px',
         borderTop: '1px solid #e2e8f0',
